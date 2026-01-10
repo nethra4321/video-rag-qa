@@ -11,7 +11,7 @@ The system works by:
 
 ### Docker set up
 ```bash
-git clone https://github.com/nethra/video-rag-qa.git
+git clone https://github.com/nethra4321/video-rag-qa.git
 cd video-rag-qa
 docker-compose up
 ```
