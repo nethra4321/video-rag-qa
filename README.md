@@ -24,7 +24,6 @@ pip install -r requirements.txt
 cp .env.example .env       # Configure environment variables
 uvicorn backend.main:app --reload
 ```
-
 Runs at `http://localhost:8000`
 
 #### Frontend
@@ -33,10 +32,7 @@ cd frontend
 npm install
 npm run dev
 ```
-
 Runs at `http://localhost:3000`
-
----
 
 ### Environment Variables
 
@@ -47,8 +43,6 @@ MODEL_NAME=llama3
 EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2
 CHUNK_SIZE=300
 ```
-
----
 
 ### Requirements
 
