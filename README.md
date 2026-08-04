@@ -19,14 +19,25 @@ Link : http://18.222.223.7:8501 (Hosted on AWS EC2)
 - FastAPI backend
 - Dockerized deployment on AWS EC2
 
----
+## How to Use
+
+### Using the Live Demo
+
+1. Open the application.
+2. Upload an MP4 video.
+3. Wait for the video to be transcribed and indexed.
+4. Select the language model (GPT-5, LLaMA 3, Qwen 2.5, or GPT-2).
+5. Enter a question about the uploaded video.
+6. Click 'Ask Question'
+7. View the generated answer along with the supporting timestamp(s) from the video.
+
+> **Note:** Processing time depends on the video length, transcription model, selected LLM, and available compute resources.
 
 ## Architecture
 
 <p align="center">
   <img src="architecture.png" width="1000"/>
 </p>
-
 
 ## Tech Stack
 
@@ -65,8 +76,6 @@ video-rag-qa/
 ├── backend/
 │   ├── main.py
 │   ├── rag.py
-│   ├── whisper_utils.py
-│   └── ...
 │
 ├── ui/
 │   └── app.py
@@ -156,7 +165,6 @@ OLLAMA_LLAMA3=llama3.2:3b
 OLLAMA_QWEN=qwen2.5:3b-instruct
 ```
 
-
 ## Workflow
 
 1. Upload an MP4 video.
@@ -170,3 +178,13 @@ OLLAMA_QWEN=qwen2.5:3b-instruct
 9. Re-rank retrieved chunks using a CrossEncoder.
 10. Generate an answer with GPT-5, LLaMA 3, Qwen, or GPT-2.
 11. Display the answer along with supporting timestamped evidence.
+
+## Evaluation
+
+The Video RAG pipeline was evaluated on a benchmark of 10 question–answer pairs using semantic similarity scoring and factual verification.
+
+| Metric | Result |
+|---------|--------|
+| Answer Accuracy | **90% (9/10)** |
+| Evaluation Method | Semantic similarity + factual verification |
+| Models Evaluated | GPT-5, GPT-2, LLaMA 3, Qwen 2.5 |
