@@ -1,4 +1,4 @@
-# 🎥 Video RAG: Timestamp-Grounded Video Question Answering
+#  Video RAG: Timestamp-Grounded Video Question Answering
 A Retrieval-Augmented Generation (RAG) application that transcribes uploaded videos, constructs timestamped semantic vector indexes, retrieves relevant context using FAISS and CrossEncoder re-ranking, and generates grounded answers using GPT-5, LLaMA 3, Qwen, or GPT-2.
 
 ## Features
