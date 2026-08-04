@@ -3,6 +3,7 @@ fastapi
 uvicorn
 pydantic
 python-dotenv
+openai
 
 # Audio + video
 faster-whisper
@@ -14,21 +15,11 @@ faiss-cpu
 numpy
 scipy
 
-# Local LLMs (GPT-2)
-torch
+# Local GPT-2 baseline
 transformers
-accelerate
 
 # UI
 streamlit
 requests
 
-
-# LoRA / fine-tuning (optional)
-peft
-datasets
-bitsandbytes
-
 huggingface-hub==0.34.4
-
-openai
