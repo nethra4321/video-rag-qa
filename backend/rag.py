@@ -30,6 +30,7 @@ import requests
 from faster_whisper import WhisperModel
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv()
 
@@ -44,9 +45,17 @@ embedder = SentenceTransformer(EMBED_MODEL)
 reranker = CrossEncoder(RERANK_MODEL)
 
 # whisper settings
-WHISPER_MODEL = os.getenv("WHISPER_MODEL", "small")
+WHISPER_MODEL = os.getenv("WHISPER_MODEL", "base")
 WHISPER_DEVICE = os.getenv("WHISPER_DEVICE", "cpu")
 WHISPER_COMPUTE = os.getenv("WHISPER_COMPUTE", "int8")
+
+whisper_model = WhisperModel(
+    WHISPER_MODEL,
+    device=WHISPER_DEVICE,
+    compute_type=WHISPER_COMPUTE,
+    cpu_threads=max(1, os.cpu_count() or 4),
+    num_workers=2,
+)
 
 # Retrieval / Chunking
 TOP_K = int(os.getenv("TOP_K", "30"))
@@ -59,6 +68,9 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434").rstrip("/")
 OLLAMA_LLAMA = os.getenv("OLLAMA_LLAMA", os.getenv("OLLAMA_LLAMA3", "llama3.2:3b"))
 OLLAMA_QWEN = os.getenv("OLLAMA_QWEN", "qwen2.5:3b-instruct")
 OLLAMA_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "180"))
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 try:
     from transformers import pipeline
@@ -91,14 +103,28 @@ def _extract_audio(video_path: str, out_wav: str):
 
 
 def _transcribe(audio_wav: str) -> List[Tuple[str, float, float]]:
-    wm = WhisperModel(WHISPER_MODEL, device=WHISPER_DEVICE, compute_type=WHISPER_COMPUTE)
-    segments, _info = wm.transcribe(audio_wav, vad_filter=True)
+    segments, _info = whisper_model.transcribe(
+        audio_wav,
+        vad_filter=True,
+        beam_size=1,
+        best_of=1,
+        condition_on_previous_text=False,
+    )
 
     out: List[Tuple[str, float, float]] = []
+
     for seg in segments:
         txt = (seg.text or "").strip()
+
         if txt:
-            out.append((txt, float(seg.start), float(seg.end)))
+            out.append(
+                (
+                    txt,
+                    float(seg.start),
+                    float(seg.end),
+                )
+            )
+
     return out
 
 
@@ -147,6 +173,18 @@ def process_video(video_path: str) -> dict:
 
     video_id = os.path.splitext(os.path.basename(video_path))[0]
     idx_path, meta_path = _index_paths(video_id)
+
+    if os.path.exists(idx_path) and os.path.exists(meta_path):
+        with open(meta_path, "r", encoding="utf-8") as f:
+            existing_meta = json.load(f)
+
+        return {
+            "ok": True,
+            "video_id": video_id,
+            "chunks_indexed": len(existing_meta.get("chunks", [])),
+            "already_processed": True,
+        }
+
     wav_path = os.path.join(INDEX_DIR, f"{video_id}__audio.wav")
 
     try:
@@ -246,6 +284,12 @@ def _ollama_generate(prompt: str, model: Optional[str], num_predict: int) -> str
 
     return (r.json().get("response") or "").strip()
 
+def _gpt5_generate(prompt: str) -> str:
+    response = client.responses.create(
+        model=os.getenv("OPENAI_MODEL", "gpt-5"),
+        input=prompt,
+    )
+    return response.output_text.strip()
 
 def _gpt2_generate(prompt: str, max_new_tokens: int = 180) -> str:
     """
@@ -342,9 +386,12 @@ def _clean_summary(s: str) -> str:
 def ask_question(video_id: str, question: str, model: Optional[str] = None) -> dict:
     index, meta = _load(video_id)
     if (index, meta) == (None, None):
-        return {"ok": False, "error": "Index not found. Click Process Video first."}
+        return {
+            "ok": False,
+            "error": "Video has not been processed yet. Please upload a video first."
+        }
 
-    if model != "__gpt2__" and not _ollama_is_up():
+    if model not in ("__gpt2__", "__gpt5__") and not _ollama_is_up():
         return {"ok": False, "error": "Ollama is not running. Start it with: `ollama serve`."}
 
     chunks: List[Dict[str, Any]] = meta["chunks"]
@@ -424,6 +471,8 @@ Summary:
 
                 if model == "__gpt2__":
                     summ = _gpt2_generate(mp, max_new_tokens=80)
+                elif model == "__gpt5__":
+                    summ = _gpt5_generate(mp)
                 else:
                     summ = _ollama_generate(mp, model=model, num_predict=140)
 
@@ -443,10 +492,21 @@ Notes (each line ends with its source tag):
 
 Write a short answer in 4–6 sentences using ONLY these notes.
 """
-                core_answer = _gpt2_generate(reduce_prompt, max_new_tokens=160).strip()
-                core_answer = core_answer.rstrip() + "\n\nProof:\n" + "\n".join(proof_lines) + "\n\nEvidence:\n" + ", ".join(
-                    [f"[{i}]" for i in range(1, min(7, len(ranked) + 1))]
+                core_answer = _gpt2_generate(
+                    reduce_prompt,
+                    max_new_tokens=160
+                ).strip()
+
+                core_answer = (
+                    core_answer.rstrip()
+                    + "\n\nProof:\n"
+                    + "\n".join(proof_lines)
+                    + "\n\nEvidence:\n"
+                    + ", ".join(
+                        [f"[{i}]" for i in range(1, min(7, len(ranked) + 1))]
+                    )
                 )
+
             else:
                 reduce_prompt = f"""You will answer using ONLY the snippet summaries.
 
@@ -454,7 +514,7 @@ Rules:
 - Write a detailed, multi-paragraph answer.
 - Each paragraph MUST include citations like [1], [2] based on the summary tags.
 - Do NOT mention ambiguity/uncertainty/missing info.
-- Include a Proof section with direct quotes from the context snippets.
+
 
 Question: {soft_q}
 
@@ -465,14 +525,16 @@ Output format:
 Answer:
 <answer>
 
-Proof:
-- [#] (timestamps) "quote"
-- ...
-
-Evidence:
-[list citations used, like [1], [2], ...]
 """
-                core_answer = _ollama_generate(reduce_prompt, model=model, num_predict=420).strip()
+
+                if model == "__gpt5__":
+                    core_answer = _gpt5_generate(reduce_prompt)
+                else:
+                    core_answer = _ollama_generate(
+                        reduce_prompt,
+                        model=model,
+                        num_predict=420
+                    ).strip()
 
         else:
             # direct
@@ -483,7 +545,6 @@ Rules:
 - Each paragraph MUST include citations like [1], [2] based on the snippets used in that paragraph.
 - If the question is broad, give a best-effort summary of the discussion.
 - Do NOT mention ambiguity/uncertainty/missing info.
-- Include a Proof section with direct quotes from the context.
 - No emojis.
 
 Question: {soft_q}
@@ -495,14 +556,16 @@ Output format:
 Answer:
 <answer>
 
-Proof:
-- [#] (timestamps) "quote"
-- ...
-
-Evidence:
-[list citations used, like [1], [2], ...]
 """
-            core_answer = _ollama_generate(prompt, model=model, num_predict=num_predict).strip()
+
+            if model == "__gpt5__":
+                core_answer = _gpt5_generate(prompt)
+            else:
+                core_answer = _ollama_generate(
+                    prompt,
+                    model=model,
+                    num_predict=num_predict
+                ).strip()
 
     except requests.HTTPError as e:
         return {"ok": False, "error": f"Ollama error: {str(e)}. Try pulling model: `ollama pull {model or OLLAMA_LLAMA}`"}
@@ -513,10 +576,29 @@ Evidence:
         return {"ok": False, "error": "Model returned empty response. Check logs/model."}
 
     # Guarantee proof lines exist
-    if "Proof:" not in core_answer:
-        core_answer = core_answer.rstrip() + "\n\nProof:\n" + "\n".join(proof_lines) + "\n\nEvidence:\n" + ", ".join(
-            [f"[{i}]" for i in range(1, min(7, len(ranked) + 1))]
+    # Remove any Proof/Evidence section generated by the LLM
+    core_answer = re.split(
+        r"\n\s*Proof\s*:",
+        core_answer,
+        maxsplit=1,
+        flags=re.IGNORECASE,
+    )[0].strip()
+
+    # Append proof generated from the actual Whisper timestamps
+    core_answer += (
+        "\n\nProof:\n"
+        + "\n".join(proof_lines)
+        + "\n\nEvidence:\n"
+        + ", ".join(
+            [
+                f"[{i}]"
+                for i in range(
+                    1,
+                    min(7, len(ranked) + 1),
+                )
+            ]
         )
+    )
 
     return {
         "ok": True,

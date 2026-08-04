@@ -41,6 +41,7 @@ def ask(req: AskReq):
         "llama3": llama,
         "qwen": qwen,
         "gpt2": "__gpt2__",  
+        "gpt5": "__gpt5__",
     }
 
     chosen = (req.model or "llama3").strip().lower()

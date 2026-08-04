@@ -1,11 +1,34 @@
+# Core backend
 fastapi
-uvicorn[standard]
+uvicorn
 pydantic
 python-dotenv
+
+# Audio + video
+faster-whisper
+ffmpeg-python
+
+# Embeddings + RAG
+sentence-transformers
+faiss-cpu
+numpy
+scipy
+
+# Local LLMs (GPT-2)
+torch
+transformers
+accelerate
+
+# UI
 streamlit
 requests
-numpy
-faiss-cpu
-sentence-transformers
-faster-whisper
+
+
+# LoRA / fine-tuning (optional)
+peft
+datasets
+bitsandbytes
+
+huggingface-hub==0.34.4
+
 openai
