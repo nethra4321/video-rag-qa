@@ -1,6 +1,8 @@
 #  Video RAG: Timestamp-Grounded Video Question Answering
 A Retrieval-Augmented Generation (RAG) application that transcribes uploaded videos, constructs timestamped semantic vector indexes, retrieves relevant context using FAISS and CrossEncoder re-ranking, and generates grounded answers using GPT-5, LLaMA 3, Qwen, or GPT-2.
 
+Link : http://18.222.223.7:8501 (Hosted on AWS EC2)
+
 ## Features
 
 - Upload MP4 videos through a Streamlit interface
